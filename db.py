@@ -1,5 +1,6 @@
+import os
 from motor.motor_asyncio import AsyncIOMotorClient
 
-MongoURI = "mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.5.3"
+MongoURI = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
 client = AsyncIOMotorClient(MongoURI)
-db = client["package_tracker"]
+db = client[os.environ.get("DB_NAME", "package_tracker")]
