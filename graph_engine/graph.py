@@ -166,13 +166,14 @@ def haversine(coord1, coord2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c  
 
-
+# Add nodes with coordinates and region
 for region, cities in continents.items():
     for city in cities:
-        if city not in city_coords:
-            continue  
-        graph.add_node(city, region=region, coords=city_coords[city])
+        if city in city_coords:
+            graph.add_node(city, region=region, coords=city_coords[city])
 
+
+# Add intra-continental edges with all metrics
 for region, cities in continents.items():
     for city in cities:
         if city not in city_coords:
@@ -181,19 +182,39 @@ for region, cities in continents.items():
         selected = random.sample(connections, k=min(2, len(connections)))
         for target in selected:
             dist = haversine(city_coords[city], city_coords[target])
-            graph.add_edge(city, target, cost=round(dist, 2))
+            cost = round(dist * random.uniform(0.3, 0.7), 2)
+            time = round((dist / 100) * random.uniform(0.8, 1.2), 2)
+            risk = round(random.uniform(0.01, 0.08), 2)
+            graph.add_edge(city, target,
+                           distance=round(dist, 2),
+                           cost=cost,
+                           time=time,
+                           risk=risk)
 
-inter_links = [("New York", "London"), ("Tokyo", "San Francisco"), ("Paris", "Cairo"), ("Johannesburg", "Mumbai"), ("Sydney", "Los Angeles"),('Mexico City','Brasília'),('Rome','Delhi'),('Perth','Jakarta')]
+# Add inter-continental links (bidirectional) with metrics
+inter_links = [
+    ("New York", "London"), ("Tokyo", "San Francisco"), ("Paris", "Cairo"),
+    ("Johannesburg", "Mumbai"), ("Sydney", "Los Angeles"),
+    ('Mexico City', 'Brasília'), ('Rome', 'Delhi'), ('Perth', 'Jakarta')
+]
+
 for u, v in inter_links:
     if u in city_coords and v in city_coords:
         dist = haversine(city_coords[u], city_coords[v])
-        graph.add_edge(u, v, cost=round(dist, 2))
-        graph.add_edge(v, u, cost=round(dist, 2))
+        cost = round(dist * random.uniform(0.3, 0.7), 2)
+        time = round((dist / 100) * random.uniform(0.8, 1.08), 2)
+        risk = round(random.uniform(0.01, 0.2), 2)
+        for src, tgt in [(u, v), (v, u)]:
+            graph.add_edge(src, tgt,
+                           distance=round(dist, 2),
+                           cost=cost,
+                           time=time,
+                           risk=risk)
 
+# Save to disk
 output_dir = "graph_data"
 os.makedirs(output_dir, exist_ok=True)
-
 with open(os.path.join(output_dir, "world_graph.gpickle"), "wb") as f:
     pickle.dump(graph, f)
 
-print("[✓] Graph saved to graph_data/world_graph.gpickle with real-world distances")
+print("[✓] Graph saved to graph_data/world_graph.gpickle with real-world distances, costs, time, and risk")
