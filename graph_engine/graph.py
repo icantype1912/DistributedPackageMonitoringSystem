@@ -43,20 +43,20 @@ city_coords = {
     "Phoenix":               (33.4484,  -112.0740),
 
     # South America
-    "São Paulo":             (-23.5505,  -46.6333),   
+    "Sao Paulo":             (-23.5505,  -46.6333),   
     "Buenos Aires":          (-34.6037,  -58.3816),   
     "Lima":                  (-12.0464,  -77.0428),   
-    "Bogotá":                (4.7110,   -74.0721),    
+    "Bogota":                (4.7110,   -74.0721),    
     "Santiago":              (-33.4489,  -70.6693),   
     "Caracas":               (10.4806,   -66.9036),   
     "Quito":                 (-0.1807,  -78.4678),    
     "La Paz":                (-16.4897,  -68.1193),   
     "Montevideo":            (-34.9011,  -56.1645),   
-    "Asunción":              (-25.2637,  -57.5759),   
-    "Medellín":              (6.2442,   -75.5812),    
+    "Asuncion":              (-25.2637,  -57.5759),   
+    "Medellin":              (6.2442,   -75.5812),    
     "Cali":                  (3.4516,   -76.5319),    
     "Salvador":              (-12.9777,  -38.5016),   
-    "Brasília":              (-15.8267,  -47.9218),   
+    "Brasilia":              (-15.8267,  -47.9218),   
     "Rio de Janeiro":        (-22.9068,  -43.1729),   
 
     # Europe
@@ -128,27 +128,23 @@ city_coords = {
     "Adelaide":              (-34.9285,  138.6007),   
     "Hobart":                (-42.8821,  147.3272),   
     "Suva":                  (-18.1248,  178.4501),   
-    "Nouméa":                (-22.2760,  166.4572),   
+    "Noumea":                (-22.2760,  166.4572),   
     "Port Moresby":          (-9.4438,   147.1803),   
-    "Nukuʻalofa":            (-21.1310, -175.2041),   
+    "Nuku'alofa":            (-21.1310, -175.2041),   
     "Apia":                  (-13.8500, -171.7600),   
     "Gold Coast":            (-28.0167,  153.4000),   
     "Darwin":                (-12.4634,  130.8456),   
     "Hamilton":              (-37.7870,  175.2793),   
 }
 
-
-
-
 continents = {
     "North America": ["New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas"],
-    "South America": ["São Paulo", "Buenos Aires", "Lima", "Bogotá", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asunción", "Cali", "Medellín", "Rio de Janeiro", "Brasília", "Salvador"],
+    "South America": ["Sao Paulo", "Buenos Aires", "Lima", "Bogota", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asuncion", "Cali", "Medellin", "Rio de Janeiro", "Brasilia", "Salvador"],
     "Europe": ["London", "Paris", "Berlin", "Madrid", "Rome", "Amsterdam", "Vienna", "Zurich", "Oslo", "Warsaw", "Lisbon", "Dublin", "Prague", "Budapest", "Copenhagen"],
     "Africa": ["Lagos", "Cairo", "Nairobi", "Accra", "Johannesburg", "Algiers", "Casablanca", "Addis Ababa", "Dakar", "Tunis", "Kampala", "Luanda", "Abidjan", "Harare", "Gaborone"],
     "Asia": ["Tokyo", "Beijing", "Shanghai", "Delhi", "Mumbai", "Seoul", "Bangkok", "Singapore", "Kuala Lumpur", "Jakarta", "Hanoi", "Manila", "Taipei", "Dhaka", "Riyadh"],
-    "Oceania": ["Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Nouméa"]
+    "Oceania": ["Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"]
 }
-
 
 def haversine(coord1, coord2):
     lat1, lon1 = coord1

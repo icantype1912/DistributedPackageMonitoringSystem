@@ -2,31 +2,46 @@ from fastapi import APIRouter, HTTPException
 from models import Package, StatusUpdateRequest
 from db import db
 from datetime import datetime
-from aiokafka import AIOKafkaProducer
 import asyncio
 import json
+import aio_pika
+import os
 
 router = APIRouter()
 
-# Initialize Kafka producer as None; will be set in startup event
-producer: AIOKafkaProducer = None
 
-# You should start the Kafka producer when your app starts
-async def start_kafka_producer():
-    global producer
-    producer = AIOKafkaProducer(
-        bootstrap_servers='localhost:9092',
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+
+rabbitmq_exchange = None
+rabbitmq_channel = None
+queue_name = "package_created"
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
+rabbitmq_connection = None
+rabbitmq_channel = None
+rabbitmq_exchange = None
+queue_name = "package_created"
+
+
+async def start_rabbitmq_producer():
+    global rabbitmq_channel, rabbitmq_exchange
+
+    connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    rabbitmq_channel = await connection.channel()
+
+    rabbitmq_exchange = await rabbitmq_channel.declare_exchange(
+        "package_exchange", aio_pika.ExchangeType.DIRECT, durable=True
     )
-    await producer.start()
+    
+    queue = await rabbitmq_channel.declare_queue(queue_name, durable=True)
+    await queue.bind(rabbitmq_exchange, routing_key=queue_name)
 
-# And close it when your app shuts down
-async def stop_kafka_producer():
-    global producer
-    if producer:
-        await producer.stop()
 
-# 🔎 List all packages
+async def stop_rabbitmq_producer():
+    global rabbitmq_connection
+    if rabbitmq_connection:
+        await rabbitmq_connection.close()
+
+
 @router.get("/", response_model=list[Package])
 async def list_packages():
     packages_cursor = db["packages"].find()
@@ -37,7 +52,7 @@ async def list_packages():
 
     return [Package(**p) for p in packages]
 
-# 🔎 Get one package by package_id
+
 @router.get("/{package_id}", response_model=Package)
 async def get_package(package_id: str):
     package = await db["packages"].find_one({"package_id": package_id})
@@ -47,7 +62,10 @@ async def get_package(package_id: str):
     package["_id"] = str(package["_id"])
     return Package(**package)
 
-# ➕ Create a new package
+
+import json
+import aio_pika
+
 @router.post("/", response_model=Package)
 async def create_package(package: Package):
     existing = await db["packages"].find_one({"package_id": package.package_id})
@@ -59,23 +77,28 @@ async def create_package(package: Package):
 
     package_data = {
         "package_id": package.package_id,
-        "source": package.origin,
-        "destination": package.destination,
+        "source": package.origin.city,
+        "destination": package.destination.city,
         "metric": package.metric,
     }
 
-    # Send to Kafka asynchronously
     try:
-        await producer.send_and_wait("package_created", package_data)
+        message_body = json.dumps(package_data).encode()
+        await rabbitmq_exchange.publish(
+            aio_pika.Message(
+                body=message_body,
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            ),
+            routing_key=queue_name
+        )
     except Exception as e:
-        # Handle/log error but don't fail the request
-        print(f"Failed to send Kafka message: {e}")
+        print(f"Failed to send RabbitMQ message: {e}")
 
     inserted = await db["packages"].find_one({"package_id": package.package_id})
     inserted["_id"] = str(inserted["_id"])
     return Package(**inserted)
 
-# ✏️ Update package status + location
+
 @router.put("/{package_id}/status", response_model=Package)
 async def update_package_status(package_id: str, update: StatusUpdateRequest):
     now = datetime.utcnow()
@@ -105,7 +128,7 @@ async def update_package_status(package_id: str, update: StatusUpdateRequest):
     updated_package["_id"] = str(updated_package["_id"])
     return Package(**updated_package)
 
-# ❌ Delete a package
+
 @router.delete("/{package_id}")
 async def delete_package(package_id: str):
     result = await db["packages"].delete_one({"package_id": package_id})

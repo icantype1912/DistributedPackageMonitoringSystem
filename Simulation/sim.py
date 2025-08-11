@@ -1,13 +1,3 @@
-"""
-simulation_service.py
-
-Async simulation microservice:
- - consumes messages from Kafka topic 'package_created'
- - reads package doc from MongoDB
- - computes shortest path on world_graph.gpickle using chosen metric
- - simulates travel: 1 real second = 2 simulation hours => 0.5s per 1 simulated hour
- - updates package history in MongoDB at every node
-"""
 
 import asyncio
 import json
@@ -19,7 +9,7 @@ from typing import Dict, Any
 import sys
 
 import networkx as nx
-from aiokafka import AIOKafkaConsumer
+import aio_pika
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -36,12 +26,13 @@ async def main():
         logger.info("Main task cancelled, shutting down...")
 
 # --- CONFIG (can also be set via env) ---
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "package_created")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB = os.getenv("MONGO_DB", "package_tracker")
 PACKAGES_COLLECTION = os.getenv("PACKAGES_COLLECTION", "packages")
 GRAPH_PATH = os.getenv("GRAPH_PATH", "/home/adi/dev/distpack/graph_engine/graph_data/world_graph.gpickle")
+
+
 
 # Simulation speed: 1 real second = 2 simulated hours -> 0.5 real seconds per simulated hour
 REAL_SECONDS_PER_SIM_HOUR = 1.0 / 1.0  
@@ -53,7 +44,7 @@ MAX_CONCURRENT_SIMULATIONS = int(os.getenv("MAX_SIM", "8"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sim-service")
 
-# --- Pydantic model for Kafka payload ---
+
 class PackageCreated(BaseModel):
     package_id: str
     source: str
@@ -67,7 +58,6 @@ graph: nx.DiGraph = None
 mongo_client: AsyncIOMotorClient = None
 db = None
 sim_semaphore: asyncio.Semaphore = None
-consumer: AIOKafkaConsumer = None
 running = True
 
 
@@ -126,9 +116,19 @@ async def simulate_package(package_id: str):
         logger.warning("Package not found in DB: %s", package_id)
         return
 
-    source = pkg.get("source")
+    source = pkg.get("origin")
     dest = pkg.get("destination")
     metric = pkg.get("metric", "time")
+
+    if isinstance(source, dict):
+        source = source.get("city")
+    else:
+        source = str(source)
+
+    if isinstance(dest, dict):
+        dest = dest.get("city")
+    else:
+        dest = str(dest)
 
     logger.info("Starting simulation for package %s: %s -> %s (metric=%s)", package_id, source, dest, metric)
 
@@ -194,7 +194,7 @@ async def simulate_package(package_id: str):
 
             # On arrival push history entry
             entry = {
-                "node": v,
+                "location": {"city":v,"region":"asia"},
                 "timestamp": datetime.utcnow().isoformat(),
                 "status": "ARRIVED",
                 "edge_from": u,
@@ -217,46 +217,39 @@ async def simulate_package(package_id: str):
         return
 
 
-# --- Kafka consumer loop --- 
 async def consume_loop():
-    global consumer, sim_semaphore, running
+    global sim_semaphore, running
 
-    consumer = AIOKafkaConsumer(
-        KAFKA_TOPIC,
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        enable_auto_commit=True,
-        auto_offset_reset="earliest",
-    )
-    await consumer.start()
-    logger.info("Kafka consumer started, listening on topic '%s'", KAFKA_TOPIC)
+    connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    channel = await connection.channel()
+    
+    queue = await channel.declare_queue("package_created", durable=True)
 
-    try:
-        async for msg in consumer:
+    async with queue.iterator() as queue_iter:
+        logger.info("RabbitMQ consumer started, listening on queue 'package_created'")
+        async for message in queue_iter:
             if not running:
                 break
-            payload = msg.value
-            try:
-                pkg_msg = PackageCreated(**payload)
-            except Exception as e:
-                logger.warning("Received invalid package message: %s | error: %s", payload, e)
-                continue
+            async with message.process():
+                try:
+                    payload = json.loads(message.body.decode())
+                    pkg_msg = PackageCreated(**payload)
+                except Exception as e:
+                    logger.warning(f"Received invalid package message: {message.body} | error: {e}")
+                    continue
 
-            # Launch simulation task with semaphore limit
-            async def _run_sim(pkg_id: str):
-                async with sim_semaphore:
-                    try:
-                        await simulate_package(pkg_id)
-                    except Exception as e:
-                        logger.exception("simulation task error for %s: %s", pkg_id, e)
+                async def _run_sim(pkg_id: str):
+                    async with sim_semaphore:
+                        try:
+                            await simulate_package(pkg_id)
+                        except Exception as e:
+                            logger.exception(f"simulation task error for {pkg_id}: {e}")
 
-            logger.info("Received package_created event: %s", pkg_msg.package_id)
-            # prefer package_id from message; if not present skip
-            asyncio.create_task(_run_sim(pkg_msg.package_id))
+                logger.info(f"Received package_created event: {pkg_msg.package_id}")
+                asyncio.create_task(_run_sim(pkg_msg.package_id))
 
-    finally:
-        await consumer.stop()
-        logger.info("Kafka consumer stopped")
+    await connection.close()
+    logger.info("RabbitMQ consumer stopped")
 
 
 # --- Startup and shutdown helpers ---

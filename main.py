@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from routes.packages import router, start_kafka_producer, stop_kafka_producer
+from routes.packages import router, start_rabbitmq_producer, stop_rabbitmq_producer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await start_kafka_producer()
+    await start_rabbitmq_producer()
     yield
-    await stop_kafka_producer()
+    await stop_rabbitmq_producer()
 
 app = FastAPI(lifespan=lifespan)
 
