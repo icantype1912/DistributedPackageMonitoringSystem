@@ -30,7 +30,7 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB = os.getenv("MONGO_DB", "package_tracker")
 PACKAGES_COLLECTION = os.getenv("PACKAGES_COLLECTION", "packages")
-GRAPH_PATH = os.getenv("GRAPH_PATH", "/home/adi/dev/distpack/graph_engine/graph_data/world_graph.gpickle")
+GRAPH_PATH = os.getenv("GRAPH_PATH", "/home/adi/dev/distpack/graph_data/world_graph.gpickle")
 
 
 

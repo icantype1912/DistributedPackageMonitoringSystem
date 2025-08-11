@@ -42,7 +42,7 @@ def shortest_path_between_cities(graph: nx.DiGraph, source: str, target: str, we
         return f"No path found between {source} and {target}."
 
 
-with open("graph_data/world_graph.gpickle", "rb") as f:
+with open("/home/adi/dev/distpack/graph_data/world_graph.gpickle", "rb") as f:
     graph = pickle.load(f)
 
 result = shortest_path_between_cities(graph, "New York", "Tokyo", weight="distance")
