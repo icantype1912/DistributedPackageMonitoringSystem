@@ -1,12 +1,10 @@
-# models.py
-
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 
 class Location(BaseModel):
     city: str
-    region: str = "" # Default to an empty string, will be populated by the endpoint
+    region: str = ""
 
 class StatusUpdates(BaseModel):
     status: str
@@ -16,8 +14,6 @@ class StatusUpdates(BaseModel):
 class StatusUpdateRequest(BaseModel):
     status: str
     location: Location
-
-# This is the new model for the incoming request
 class PackageIn(BaseModel):
     package_id: str
     origin: Location
@@ -32,9 +28,9 @@ class Package(BaseModel):
     origin: Location
     destination: Location
     metric: str
-    status: str = "shipping"  # Default status
+    status: str = "shipping"  
     location: Location
-    history: List[StatusUpdates] = []  # Default empty history list
+    history: List[StatusUpdates] = [] 
     last_updated: datetime = datetime.utcnow() # Default timestamp
 
     class Config:

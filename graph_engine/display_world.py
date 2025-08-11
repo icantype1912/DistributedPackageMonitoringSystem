@@ -2,9 +2,13 @@ import plotly.graph_objects as go
 import networkx as nx
 import pickle
 import math
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+GRAPH_PATH = os.getenv("GRAPH_PATH")
 # Load graph
-with open("/home/adi/dev/distpack/graph_data/world_graph.gpickle", "rb") as f:
+with open(GRAPH_PATH, "rb") as f:
     graph = pickle.load(f)
 
 # Node data

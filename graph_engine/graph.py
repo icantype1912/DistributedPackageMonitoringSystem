@@ -2,6 +2,7 @@ import networkx as nx
 import random
 import math
 import os
+from dotenv import load_dotenv
 import pickle
 
 graph = nx.DiGraph()
@@ -208,8 +209,7 @@ for u, v in inter_links:
                            risk=risk)
 
 # Save to disk
-output_dir = "graph_data"
-os.makedirs(output_dir, exist_ok=True)
+output_dir = os.getenv("GRAPH_OUTPUT")
 with open(os.path.join(output_dir, "world_graph.gpickle"), "wb") as f:
     pickle.dump(graph, f)
 

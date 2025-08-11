@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import logging
@@ -16,21 +15,15 @@ from dotenv import load_dotenv
 import os
 import pickle
 
+# Load environment variables from the .env file in the current working directory
 load_dotenv()
 
-async def main():
-    global running
-    try:
-        await start_service()
-    except asyncio.CancelledError:
-        logger.info("Main task cancelled, shutting down...")
-
 # --- CONFIG (can also be set via env) ---
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB = os.getenv("MONGO_DB", "package_tracker")
-PACKAGES_COLLECTION = os.getenv("PACKAGES_COLLECTION", "packages")
-GRAPH_PATH = os.getenv("GRAPH_PATH", "/home/adi/dev/distpack/graph_data/world_graph.gpickle")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+MONGO_URI = os.getenv("MONGO_URL") 
+MONGO_DB = os.getenv("MONGO_DB") 
+PACKAGES_COLLECTION = os.getenv("PACKAGES_COLLECTION")
+GRAPH_PATH = os.getenv("GRAPH_PATH")
 
 continents = {
     "North America": ["New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas"],
@@ -41,7 +34,7 @@ continents = {
     "Oceania": ["Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"]
 }
 
-# Simulation speed: 1 real second = 2 simulated hours -> 0.5 real seconds per simulated hour
+# Simulation speed: 1 real second = 1 simulated hour
 REAL_SECONDS_PER_SIM_HOUR = 1.0 / 1.0  
 
 # Concurrency limit (how many simulations run in parallel)
@@ -56,8 +49,7 @@ class PackageCreated(BaseModel):
     package_id: str
     source: str
     destination: str
-    metric: str  # 'distance' | 'cost' | 'time' | 'risk'
-    # optional: additional metadata
+    metric: str
     metadata: Dict[str, Any] = {}
 
 # --- Global placeholders (filled at startup) ---
@@ -81,7 +73,6 @@ def accumulated_risk_from_path(graph: nx.DiGraph, path: list) -> float:
     for i in range(len(path) - 1):
         edge = graph[path[i]][path[i + 1]]
         r = float(edge.get("risk", 0.0))
-        # clamp
         r = min(max(r, 0.0), 1.0)
         survival *= (1.0 - r)
     return 1.0 - survival
@@ -90,7 +81,7 @@ async def push_history_and_status(package_id: str, entry: dict):
     """
     Push a history entry into the package doc and set updated status and location.
     """
-    global db
+    global db, PACKAGES_COLLECTION
     coll = db[PACKAGES_COLLECTION]
     await coll.update_one(
         {"package_id": package_id},
@@ -105,19 +96,15 @@ async def push_history_and_status(package_id: str, entry: dict):
     )
 
 async def mark_package_status(package_id: str, status: str):
-    global db
+    global db, PACKAGES_COLLECTION
     coll = db[PACKAGES_COLLECTION]
     await coll.update_one({"package_id": package_id}, {"$set": {"status": status, "updated_at": datetime.utcnow().isoformat()}})
-
-# Assuming the 'continents' dictionary and 'get_region_from_city' helper
-# function are defined elsewhere in your code, as shown in previous responses.
 
 async def simulate_package(package_id: str):
     """
     Read package doc from DB, compute path, and simulate movement.
-    This function is an asyncio coroutine and should be run as an asyncio Task.
     """
-    global graph, db
+    global graph, db, PACKAGES_COLLECTION
 
     coll = db[PACKAGES_COLLECTION]
     pkg = await coll.find_one({"package_id": package_id})
@@ -141,10 +128,8 @@ async def simulate_package(package_id: str):
 
     logger.info("Starting simulation for package %s: %s -> %s (metric=%s)", package_id, source, dest, metric)
 
-    # compute shortest path using chosen metric
     try:
         path = nx.dijkstra_path(graph, source, dest, weight=metric)
-        total_metric = nx.dijkstra_path_length(graph, source, dest, weight=metric)
     except nx.NetworkXNoPath:
         logger.error("No path found for %s -> %s", source, dest)
         await mark_package_status(package_id, "FAILED_NO_PATH")
@@ -154,10 +139,10 @@ async def simulate_package(package_id: str):
         await mark_package_status(package_id, "FAILED")
         return
 
-    # calculate totals using edges (distance, cost, time) for reporting
+    # Calculate totals for reporting
     total_distance = 0.0
     total_cost = 0.0
-    total_time = 0.0  # in simulated hours
+    total_time = 0.0
     for i in range(len(path) - 1):
         e = graph[path[i]][path[i + 1]]
         total_distance += float(e.get("distance", 0.0))
@@ -182,7 +167,6 @@ async def simulate_package(package_id: str):
         },
     )
 
-    # For each hop simulate travel and update history when arrived at next node
     try:
         for i in range(len(path) - 1):
             u = path[i]
@@ -193,30 +177,22 @@ async def simulate_package(package_id: str):
             edge_time = float(edge.get("time", 0.0))
             edge_risk = float(edge.get("risk", 0.0))
 
-            # compute real sleep seconds: edge_time (hrs) * REAL_SECONDS_PER_SIM_HOUR
             sleep_seconds = edge_time * REAL_SECONDS_PER_SIM_HOUR
-
             logger.info("Package %s: %s -> %s : time=%.2f hr -> sleeping %.3f s", package_id, u, v, edge_time, sleep_seconds)
-
-            # Wait to emulate travel (non-blocking)
             await asyncio.sleep(sleep_seconds)
 
-            # On arrival push history entry and update location
-            # Get the correct region for the city `v`
             location = {"city": v, "region": get_region_from_city(v)}
 
             entry = {
                 "location": location,
                 "timestamp": datetime.utcnow().isoformat(),
-                "status": "IN_TRANSIT", # Set status to IN_TRANSIT at intermediate stops
+                "status": "IN_TRANSIT",
                 "edge_from": u,
                 "edge_distance_km": round(edge_dist, 2),
                 "edge_cost_usd": round(edge_cost, 2),
                 "edge_time_hr": round(edge_time, 2),
                 "edge_risk": round(edge_risk, 4),
             }
-            
-            # This call updates the history, status, and location simultaneously
             await push_history_and_status(package_id, entry)
             logger.info("Package %s arrived at %s (edge %s->%s)", package_id, v, u, v)
 
@@ -227,7 +203,6 @@ async def simulate_package(package_id: str):
                 "$set": {
                     "status": "DELIVERED",
                     "delivered_at": datetime.utcnow().isoformat(),
-                    # Set the final location to the destination city
                     "location": {"city": dest, "region": get_region_from_city(dest)},
                 }
             }
@@ -273,59 +248,53 @@ async def consume_loop():
     await connection.close()
     logger.info("RabbitMQ consumer stopped")
 
-
 # --- Startup and shutdown helpers ---
-async def start_service():
+async def start_service_and_run_forever():
+    """
+    Initializes the service and runs the consumer loop indefinitely.
+    """
     global graph, mongo_client, db, sim_semaphore
 
-    # load graph
+    # Load graph
     logger.info("Loading graph from %s", GRAPH_PATH)
+    if not GRAPH_PATH or not os.path.exists(GRAPH_PATH):
+        logger.error(f"Graph file not found at: {GRAPH_PATH}")
+        # Use sys.exit to stop execution in a way that doesn't rely on asyncio
+        sys.exit(1)
+    
     with open(GRAPH_PATH, "rb") as f:
         graph = pickle.load(f)
-# your graph must include edge attributes: distance, cost, time, risk
     logger.info("Graph loaded: nodes=%d edges=%d", graph.number_of_nodes(), graph.number_of_edges())
 
-    # init mongo
+    # Init mongo
     mongo_client = AsyncIOMotorClient(MONGO_URI)
     db = mongo_client[MONGO_DB]
     logger.info("Connected to MongoDB: %s/%s", MONGO_URI, MONGO_DB)
 
     sim_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SIMULATIONS)
-    # start consumer loop
-    await consume_loop()
 
+    # Await the consumer loop, which will block until the service is shut down
+    await consume_loop()
 
 def _shutdown():
     global running
     running = False
     logger.info("Shutdown requested")
 
-
+# The main coroutine is no longer needed with this new structure
+# as the startup logic is now handled in start_service_and_run_forever
+# and is awaited in the main entry point.
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-
-    # Create the main task
-    main_task = loop.create_task(main())
-
-    def shutdown():
-        global running
-        running = False
-        logger.info("Shutdown requested")
-        main_task.cancel()
-
-    # register signals
-    for s in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(s, shutdown)
-
+    # Corrected entry point to use asyncio.run()
     try:
-        loop.run_until_complete(main_task)
+        asyncio.run(start_service_and_run_forever())
     except asyncio.CancelledError:
         logger.info("Shutdown complete")
+    except Exception as e:
+        logger.exception("An unhandled exception occurred during startup or shutdown: %s", e)
     finally:
         # Cleanup Mongo and other resources
         if mongo_client:
             mongo_client.close()
-        loop.stop()
-        loop.close()
         sys.exit(0)

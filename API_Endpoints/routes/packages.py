@@ -6,6 +6,9 @@ import asyncio
 import json
 import aio_pika
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter()
 
@@ -18,7 +21,6 @@ all_cities = [
     "Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"
 ]
 
-# You need this continents dictionary to automatically fill in the region.
 continents = {
     "North America": ["New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas"],
     "South America": ["Sao Paulo", "Buenos Aires", "Lima", "Bogota", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asuncion", "Cali", "Medellin", "Rio de Janeiro", "Brasilia", "Salvador"],
@@ -32,7 +34,7 @@ rabbitmq_exchange = None
 rabbitmq_channel = None
 queue_name = "package_created"
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
 rabbitmq_connection = None
 rabbitmq_channel = None
 rabbitmq_exchange = None

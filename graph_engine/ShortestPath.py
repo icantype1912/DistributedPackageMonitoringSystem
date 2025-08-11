@@ -1,5 +1,7 @@
 import networkx as nx
 import pickle
+import os
+from dotenv import load_dotenv
 
 
 def shortest_path_between_cities(graph: nx.DiGraph, source: str, target: str, weight: str):
@@ -41,8 +43,9 @@ def shortest_path_between_cities(graph: nx.DiGraph, source: str, target: str, we
     except nx.NetworkXNoPath:
         return f"No path found between {source} and {target}."
 
+GRAPH_PATH = os.getenv("GRAPH_PATH")
 
-with open("/home/adi/dev/distpack/graph_data/world_graph.gpickle", "rb") as f:
+with open(GRAPH_PATH, "rb") as f:
     graph = pickle.load(f)
 
 result = shortest_path_between_cities(graph, "New York", "Tokyo", weight="distance")
