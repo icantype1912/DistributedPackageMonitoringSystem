@@ -19,6 +19,7 @@ class Package(BaseModel):
     package_id: str
     origin: Location
     destination: Location
+    metric : str 
     status: str
     location:Location
     history: List[StatusUpdates] = []

@@ -2,8 +2,29 @@ from fastapi import APIRouter, HTTPException
 from models import Package, StatusUpdateRequest
 from db import db
 from datetime import datetime
+from aiokafka import AIOKafkaProducer
+import asyncio
+import json
 
 router = APIRouter()
+
+# Initialize Kafka producer as None; will be set in startup event
+producer: AIOKafkaProducer = None
+
+# You should start the Kafka producer when your app starts
+async def start_kafka_producer():
+    global producer
+    producer = AIOKafkaProducer(
+        bootstrap_servers='localhost:9092',
+        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    )
+    await producer.start()
+
+# And close it when your app shuts down
+async def stop_kafka_producer():
+    global producer
+    if producer:
+        await producer.stop()
 
 # 🔎 List all packages
 @router.get("/", response_model=list[Package])
@@ -29,7 +50,6 @@ async def get_package(package_id: str):
 # ➕ Create a new package
 @router.post("/", response_model=Package)
 async def create_package(package: Package):
-    # Ensure no duplicate package_id
     existing = await db["packages"].find_one({"package_id": package.package_id})
     if existing:
         raise HTTPException(status_code=400, detail=f"Package ID '{package.package_id}' already exists")
@@ -37,7 +57,20 @@ async def create_package(package: Package):
     package_dict = package.dict(by_alias=True, exclude={"id"})
     await db["packages"].insert_one(package_dict)
 
-    # Fetch and return the inserted package
+    package_data = {
+        "package_id": package.package_id,
+        "source": package.origin,
+        "destination": package.destination,
+        "metric": package.metric,
+    }
+
+    # Send to Kafka asynchronously
+    try:
+        await producer.send_and_wait("package_created", package_data)
+    except Exception as e:
+        # Handle/log error but don't fail the request
+        print(f"Failed to send Kafka message: {e}")
+
     inserted = await db["packages"].find_one({"package_id": package.package_id})
     inserted["_id"] = str(inserted["_id"])
     return Package(**inserted)

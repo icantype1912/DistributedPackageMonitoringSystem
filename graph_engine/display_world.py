@@ -4,7 +4,7 @@ import pickle
 import math
 
 # Load graph
-with open("graph_data/world_graph.gpickle", "rb") as f:
+with open("/home/adi/dev/distpack/graph_engine/graph_data/world_graph.gpickle", "rb") as f:
     graph = pickle.load(f)
 
 # Node data
