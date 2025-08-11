@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from models import Package, StatusUpdateRequest
+from models import Package, StatusUpdateRequest, PackageIn, Location, StatusUpdates
 from db import db
 from datetime import datetime
 import asyncio
@@ -9,7 +9,24 @@ import os
 
 router = APIRouter()
 
+all_cities = [
+    "New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas",
+    "Sao Paulo", "Buenos Aires", "Lima", "Bogota", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asuncion", "Cali", "Medellin", "Rio de Janeiro", "Brasilia", "Salvador",
+    "London", "Paris", "Berlin", "Madrid", "Rome", "Amsterdam", "Vienna", "Zurich", "Oslo", "Warsaw", "Lisbon", "Dublin", "Prague", "Budapest", "Copenhagen",
+    "Lagos", "Cairo", "Nairobi", "Accra", "Johannesburg", "Algiers", "Casablanca", "Addis Ababa", "Dakar", "Tunis", "Kampala", "Luanda", "Abidjan", "Harare", "Gaborone",
+    "Tokyo", "Beijing", "Shanghai", "Delhi", "Mumbai", "Seoul", "Bangkok", "Singapore", "Kuala Lumpur", "Jakarta", "Hanoi", "Manila", "Taipei", "Dhaka", "Riyadh",
+    "Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"
+]
 
+# You need this continents dictionary to automatically fill in the region.
+continents = {
+    "North America": ["New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas"],
+    "South America": ["Sao Paulo", "Buenos Aires", "Lima", "Bogota", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asuncion", "Cali", "Medellin", "Rio de Janeiro", "Brasilia", "Salvador"],
+    "Europe": ["London", "Paris", "Berlin", "Madrid", "Rome", "Amsterdam", "Vienna", "Zurich", "Oslo", "Warsaw", "Lisbon", "Dublin", "Prague", "Budapest", "Copenhagen"],
+    "Africa": ["Lagos", "Cairo", "Nairobi", "Accra", "Johannesburg", "Algiers", "Casablanca", "Addis Ababa", "Dakar", "Tunis", "Kampala", "Luanda", "Abidjan", "Harare", "Gaborone"],
+    "Asia": ["Tokyo", "Beijing", "Shanghai", "Delhi", "Mumbai", "Seoul", "Bangkok", "Singapore", "Kuala Lumpur", "Jakarta", "Hanoi", "Manila", "Taipei", "Dhaka", "Riyadh"],
+    "Oceania": ["Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"]
+}
 
 rabbitmq_exchange = None
 rabbitmq_channel = None
@@ -63,23 +80,57 @@ async def get_package(package_id: str):
     return Package(**package)
 
 
-import json
-import aio_pika
+def get_region_from_city(city_name: str) -> str:
+    """Helper function to find the region for a given city."""
+    for region, cities in continents.items():
+        if city_name in cities:
+            return region
+    return ""
+
 
 @router.post("/", response_model=Package)
-async def create_package(package: Package):
-    existing = await db["packages"].find_one({"package_id": package.package_id})
+async def create_package(package_in: PackageIn):
+    # Check if the package ID already exists
+    existing = await db["packages"].find_one({"package_id": package_in.package_id})
     if existing:
-        raise HTTPException(status_code=400, detail=f"Package ID '{package.package_id}' already exists")
+        raise HTTPException(status_code=400, detail=f"Package ID '{package_in.package_id}' already exists")
 
-    package_dict = package.dict(by_alias=True, exclude={"id"})
+    # Validate that the cities are serviceable
+    origin_city = package_in.origin.city
+    destination_city = package_in.destination.city
+
+    if origin_city not in all_cities or destination_city not in all_cities:
+        raise HTTPException(status_code=400, detail=f"Unservicable location")
+
+    # Automatically determine regions and fill in default values
+    origin_region = get_region_from_city(origin_city)
+    destination_region = get_region_from_city(destination_city)
+    now = datetime.utcnow()
+
+    # Create the complete Package object
+    full_package = Package(
+        package_id=package_in.package_id,
+        origin=Location(city=origin_city, region=origin_region),
+        destination=Location(city=destination_city, region=destination_region),
+        metric=package_in.metric,
+        status="shipping",  # Default status
+        location=Location(city=origin_city, region=origin_region),  # Initial location is origin
+        history=[
+            StatusUpdates(status="shipping", timestamp=now, location=Location(city=origin_city, region=origin_region))
+        ],
+        last_updated=now,
+    )
+    
+    # Convert the Pydantic model to a dictionary for database insertion
+    package_dict = full_package.dict(by_alias=True, exclude={"id"})
     await db["packages"].insert_one(package_dict)
 
+    # Prepare and send the message to RabbitMQ
     package_data = {
-        "package_id": package.package_id,
-        "source": package.origin.city,
-        "destination": package.destination.city,
-        "metric": package.metric,
+        "package_id": full_package.package_id,
+        "source": full_package.origin.city,
+        "destination": full_package.destination.city,
+        "metric": full_package.metric,
     }
 
     try:
@@ -94,9 +145,14 @@ async def create_package(package: Package):
     except Exception as e:
         print(f"Failed to send RabbitMQ message: {e}")
 
-    inserted = await db["packages"].find_one({"package_id": package.package_id})
-    inserted["_id"] = str(inserted["_id"])
-    return Package(**inserted)
+    # Fetch the newly created document from the database to return
+    inserted = await db["packages"].find_one({"package_id": package_in.package_id})
+    if inserted:
+        inserted["_id"] = str(inserted["_id"])
+        return Package(**inserted)
+    else:
+        # This case should ideally not be reached if insertion was successful
+        raise HTTPException(status_code=500, detail="Failed to retrieve newly created package")
 
 
 @router.put("/{package_id}/status", response_model=Package)

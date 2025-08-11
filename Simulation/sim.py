@@ -32,7 +32,14 @@ MONGO_DB = os.getenv("MONGO_DB", "package_tracker")
 PACKAGES_COLLECTION = os.getenv("PACKAGES_COLLECTION", "packages")
 GRAPH_PATH = os.getenv("GRAPH_PATH", "/home/adi/dev/distpack/graph_data/world_graph.gpickle")
 
-
+continents = {
+    "North America": ["New York", "Los Angeles", "Toronto", "Chicago", "Houston", "Vancouver", "San Francisco", "Mexico City", "Miami", "Atlanta", "Montreal", "Seattle", "Boston", "Phoenix", "Dallas"],
+    "South America": ["Sao Paulo", "Buenos Aires", "Lima", "Bogota", "Santiago", "Caracas", "Quito", "La Paz", "Montevideo", "Asuncion", "Cali", "Medellin", "Rio de Janeiro", "Brasilia", "Salvador"],
+    "Europe": ["London", "Paris", "Berlin", "Madrid", "Rome", "Amsterdam", "Vienna", "Zurich", "Oslo", "Warsaw", "Lisbon", "Dublin", "Prague", "Budapest", "Copenhagen"],
+    "Africa": ["Lagos", "Cairo", "Nairobi", "Accra", "Johannesburg", "Algiers", "Casablanca", "Addis Ababa", "Dakar", "Tunis", "Kampala", "Luanda", "Abidjan", "Harare", "Gaborone"],
+    "Asia": ["Tokyo", "Beijing", "Shanghai", "Delhi", "Mumbai", "Seoul", "Bangkok", "Singapore", "Kuala Lumpur", "Jakarta", "Hanoi", "Manila", "Taipei", "Dhaka", "Riyadh"],
+    "Oceania": ["Sydney", "Melbourne", "Auckland", "Brisbane", "Perth", "Wellington", "Adelaide", "Canberra", "Hobart", "Gold Coast", "Darwin", "Hamilton", "Christchurch", "Suva", "Noumea"]
+}
 
 # Simulation speed: 1 real second = 2 simulated hours -> 0.5 real seconds per simulated hour
 REAL_SECONDS_PER_SIM_HOUR = 1.0 / 1.0  
@@ -60,6 +67,12 @@ db = None
 sim_semaphore: asyncio.Semaphore = None
 running = True
 
+def get_region_from_city(city_name: str) -> str:
+    """Helper function to find the region for a given city."""
+    for region, cities in continents.items():
+        if city_name in cities:
+            return region
+    return ""
 
 # --- Utility functions ---
 def accumulated_risk_from_path(graph: nx.DiGraph, path: list) -> float:
@@ -73,36 +86,32 @@ def accumulated_risk_from_path(graph: nx.DiGraph, path: list) -> float:
         survival *= (1.0 - r)
     return 1.0 - survival
 
-
 async def push_history_and_status(package_id: str, entry: dict):
     """
-    Push a history entry into the package doc and optionally set an updated status.
-    entry example:
-      {
-        "node": "London",
-        "timestamp": ISO str,
-        "status": "arrived",
-        "edge_distance": ...,
-        "edge_cost": ...,
-        "edge_time": ...,
-        "edge_risk": ...
-      }
+    Push a history entry into the package doc and set updated status and location.
     """
     global db
     coll = db[PACKAGES_COLLECTION]
     await coll.update_one(
         {"package_id": package_id},
-        {"$push": {"history": entry}, "$set": {"updated_at": datetime.utcnow().isoformat()}},
+        {
+            "$push": {"history": entry},
+            "$set": {
+                "updated_at": datetime.utcnow().isoformat(),
+                "status": entry.get("status"),
+                "location": entry.get("location")
+            }
+        },
     )
-
 
 async def mark_package_status(package_id: str, status: str):
     global db
     coll = db[PACKAGES_COLLECTION]
     await coll.update_one({"package_id": package_id}, {"$set": {"status": status, "updated_at": datetime.utcnow().isoformat()}})
 
+# Assuming the 'continents' dictionary and 'get_region_from_city' helper
+# function are defined elsewhere in your code, as shown in previous responses.
 
-# --- Core simulation logic ---
 async def simulate_package(package_id: str):
     """
     Read package doc from DB, compute path, and simulate movement.
@@ -192,30 +201,43 @@ async def simulate_package(package_id: str):
             # Wait to emulate travel (non-blocking)
             await asyncio.sleep(sleep_seconds)
 
-            # On arrival push history entry
+            # On arrival push history entry and update location
+            # Get the correct region for the city `v`
+            location = {"city": v, "region": get_region_from_city(v)}
+
             entry = {
-                "location": {"city":v,"region":"asia"},
+                "location": location,
                 "timestamp": datetime.utcnow().isoformat(),
-                "status": "ARRIVED",
+                "status": "IN_TRANSIT", # Set status to IN_TRANSIT at intermediate stops
                 "edge_from": u,
                 "edge_distance_km": round(edge_dist, 2),
                 "edge_cost_usd": round(edge_cost, 2),
                 "edge_time_hr": round(edge_time, 2),
                 "edge_risk": round(edge_risk, 4),
             }
+            
+            # This call updates the history, status, and location simultaneously
             await push_history_and_status(package_id, entry)
             logger.info("Package %s arrived at %s (edge %s->%s)", package_id, v, u, v)
 
         # Completed delivery
-        await mark_package_status(package_id, "DELIVERED")
-        await coll.update_one({"package_id": package_id}, {"$set": {"delivered_at": datetime.utcnow().isoformat()}})
+        await coll.update_one(
+            {"package_id": package_id},
+            {
+                "$set": {
+                    "status": "DELIVERED",
+                    "delivered_at": datetime.utcnow().isoformat(),
+                    # Set the final location to the destination city
+                    "location": {"city": dest, "region": get_region_from_city(dest)},
+                }
+            }
+        )
         logger.info("Package %s delivered. route=%s, total_time_hr=%.2f", package_id, path, total_time)
 
     except Exception as e:
         logger.exception("Error during simulation for %s: %s", package_id, e)
         await mark_package_status(package_id, "FAILED")
         return
-
 
 async def consume_loop():
     global sim_semaphore, running
