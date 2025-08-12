@@ -3,6 +3,9 @@
 A distributed, simulation-driven package delivery tracking system inspired by real-world logistics platforms.  
 It simulates worldwide package movement using graph-based routing, tracks status updates in real time, and integrates distributed database concepts.
 
+# Architecture Diagram
+<img width="1024" height="1024" alt="ChatGPT Image Aug 12, 2025, 10_24_31 PM" src="https://github.com/user-attachments/assets/94b39476-c9b2-4296-aab1-fc050c58aaad" />
+
 
 <img width="3840" height="1850" alt="image" src="https://github.com/user-attachments/assets/7b49c55e-c327-4d07-bffc-4505343ac25d" />
 
