@@ -1,4 +1,4 @@
-# 📦 Distributed Package Delivery Tracker
+#  Distributed Package Delivery Tracker
 
 A distributed, simulation-driven package delivery tracking system inspired by real-world logistics platforms.  
 It simulates worldwide package movement using graph-based routing, tracks status updates in real time, and integrates distributed database concepts.
@@ -7,7 +7,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 🚀 Features
+##  Features
 
 - **FastAPI Backend** — REST API for package creation, status tracking, and querying.
 - **MongoDB Integration** — Stores packages, histories, and updates with structured schemas.
@@ -24,7 +24,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 🛠 Technologies Used
+##  Technologies Used
 
 - **Backend**: Python, FastAPI
 - **Database**: MongoDB
@@ -36,7 +36,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 🧮 How It Works
+##  How It Works
 
 1. **Package Creation** — User creates a package via the API → stored in MongoDB → published to RabbitMQ.  
 2. **Simulation** — The `Simulation` service consumes messages, finds shortest route in the graph, and simulates package movement in real time.  
@@ -45,7 +45,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 🌍 Current Graph Details
+##  Current Graph Details
 
 - **Regions**: Continents as major clusters.  
 - **Cities per Continent**: ~15.  
@@ -54,7 +54,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 📅 Development Phases
+##  Development Phases
 
 - **Phase 1 ✅** — FastAPI + MongoDB integration with CRUD for packages.  
 - **Phase 2 ✅** — Graph engine, real-time simulation, RabbitMQ messaging system.  
@@ -62,7 +62,7 @@ It simulates worldwide package movement using graph-based routing, tracks status
 
 ---
 
-## 📜 License
+##  License
 
 MIT License — free to use and modify.
 
