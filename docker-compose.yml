@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  mongo_asia:
+    image: mongo:6
+    container_name: mongo_asia
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_asia_data:/data/db
+
+  mongo_europe:
+    image: mongo:6
+    container_name: mongo_europe
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_europe_data:/data/db
+
+  mongo_na:
+    image: mongo:6
+    container_name: mongo_na
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo_na_data:/data/db
+
+  mongo_sa:
+    image: mongo:6
+    container_name: mongo_sa
+    ports:
+      - "27021:27017"
+    volumes:
+      - mongo_sa_data:/data/db
+
+  mongo_africa:
+    image: mongo:6
+    container_name: mongo_africa
+    ports:
+      - "27022:27017"
+    volumes:
+      - mongo_africa_data:/data/db
+
+  mongo_oceania:
+    image: mongo:6
+    container_name: mongo_oceania
+    ports:
+      - "27023:27017"
+    volumes:
+      - mongo_oceania_data:/data/db
+
+  mongo_index:
+    image: mongo:6
+    container_name: mongo_index
+    ports:
+      - "27024:27017"
+    volumes:
+      - mongo_index_data:/data/db
+
+volumes:
+  mongo_asia_data:
+  mongo_europe_data:
+  mongo_na_data:
+  mongo_sa_data:
+  mongo_africa_data:
+  mongo_oceania_data:
+  mongo_index_data:

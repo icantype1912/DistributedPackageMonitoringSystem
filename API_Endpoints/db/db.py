@@ -5,5 +5,5 @@ load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URL") 
 
-client = AsyncIOMotorClient(MONGO_URI)   # use the variable name MONGO_URI (case-sensitive)
+client = AsyncIOMotorClient(MONGO_URI)   
 db = client[os.environ.get("DB_NAME", "package_tracker")]
